@@ -10,7 +10,7 @@ function init() {
   readonly ORIG_PWD="${PWD}"
   readonly OUTPUT="${PWD}/output"
   local tmpdir
-  tmpdir="$(mktemp --dry-run --directory --tmpdir="${PWD}/tmp")"
+  tmpdir="${PWD}/tmp/$(basename "$(mktemp -u)")"
   readonly TMPDIR="${tmpdir}"
   mkdir -p "${OUTPUT}" "${TMPDIR}"
 
@@ -51,7 +51,7 @@ function start_qemu() {
   # Used to communicate with qemu
   mkfifo guest.out guest.in
   # We could use a sparse file but we want to fail early
-  fallocate -l 4G scratch-disk.img
+  fallocate -l 4G scratch-disk.img || mkfile -n 6G scratch-disk.img
 
   { qemu-system-x86_64 \
     -machine accel=kvm:tcg \
@@ -104,6 +104,8 @@ function main() {
   prepare_boot
   start_qemu
 
+  sleep 30
+
   # Login
   expect "archiso login:"
   send "root\n"
@@ -134,11 +136,15 @@ function main() {
   expect "# "
 
   # Install required packages
-  send "pacman -Syu --ignore linux --noconfirm qemu-headless jq\n"
+  send "pacman -Syu --ignore linux --noconfirm qemu-img jq\n"
+  expect "# " 120 # grub comment
+  expect "# " 120 # grub comment
   expect "# " 120 # (10/14) Updating module dependencies...
 
   ## Start build and copy output to local disk
   send "bash -x ./build-inside-vm.sh ${BUILD_VERSION:-}\n"
+  expect "# " 240 # grub comment
+  expect "# " 240 # grub comment
   expect "# " 240 # qemu-img convert can take a long time
   send "cp -vr --preserve=mode,timestamps output /mnt/arch-boxes/tmp/$(basename "${TMPDIR}")/\n"
   expect "# " 60
